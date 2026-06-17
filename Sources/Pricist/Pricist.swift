@@ -1,7 +1,14 @@
 import Foundation
+#if canImport(Security)
+import Security
+#endif
 #if canImport(UIKit) && !os(watchOS)
 import UIKit
 #endif
+
+/// Callback type for attribution results. Fires with the server's sanitized
+/// `AttributionResult`, or `nil` when attribution could not be resolved.
+public typealias AttributionCallback = (AttributionResult?) -> Void
 
 /// Callback type for remote-config loaded events.
 public typealias ConfigLoadedCallback = ([String: Any]) -> Void
@@ -49,12 +56,30 @@ public final class Pricist {
     private var hashedEmail: String?
     private var hashedPhone: String?
     private var hashedExternalId: String?
+    // Deep-link click token (`pricist_click`) claimed from an inbound URL.
+    private var clickToken: String?
 
     // Consent: nil until the host calls setConsent. When nil, the SDK tracks
     // normally (opt-in / track-by-default model).
     private var consent: PricistConsent?
 
     private var configCallbacks: [ConfigLoadedCallback] = []
+
+    // MARK: - Attribution state
+    private var attributionCallbacks: [AttributionCallback] = []
+    private var cachedAttribution: AttributionResult?
+
+    // MARK: - Session re-fire (identifier change debounce)
+    //
+    // Identifier setters mark the in-memory set dirty and schedule a debounced
+    // re-POST of the session so the server learns upgraded identifiers without
+    // waiting for the next launch. A 1s debounce coalesces bursts; an in-flight
+    // guard prevents overlapping POSTs.
+    private let sessionQueue = DispatchQueue(label: "com.pricist.session")
+    private var isIdentifierDirty = false
+    private var isReFireInFlight = false
+    private var identifierDebounceTimer: DispatchSourceTimer?
+    private static let identifierDebounceMs: Int = 1000
 
     // MARK: - ATT wait state
     private var isWaitingForATT = false
@@ -65,6 +90,8 @@ public final class Pricist {
     private static let configKey = "com.pricist.config"
     private static let configTimestampKey = "com.pricist.config.ts"
     private static let configCacheTTL: TimeInterval = 300 // 5 minutes
+    private static let keychainService = "com.pricist.attribution"
+    private static let keychainAccount = "attribution_result"
 
     private init() {
         self.eventQueue = EventQueue()
@@ -149,6 +176,246 @@ public final class Pricist {
         } else {
             trackActivateApp()
         }
+
+        startAttributionSession(isFirstSession: isFirstLaunch)
+    }
+
+    // MARK: - Attribution Session
+
+    /// Fire the attribution session. If a cached result already exists in the
+    /// Keychain, return it without POSTing (and notify any pending callbacks).
+    /// Otherwise POST `/api/session`, cache the result, and fire callbacks.
+    private func startAttributionSession(isFirstSession: Bool) {
+        if let cached = loadAttribution() {
+            withState { self.cachedAttribution = cached }
+            Logger.debug("Loaded cached attribution — skipping session POST")
+            notifyAttributionCallbacks(cached)
+            return
+        }
+        postSession(isFirstSession: isFirstSession) { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .success(let attribution):
+                self.saveAttribution(attribution)
+                self.withState { self.cachedAttribution = attribution }
+                Logger.info("Attribution received (attributed=\(attribution.attributed), method=\(attribution.method))")
+                self.notifyAttributionCallbacks(attribution)
+            case .failure(let error):
+                Logger.error("Attribution session failed: \(error)")
+                self.notifyAttributionCallbacks(nil)
+            }
+        }
+    }
+
+    /// Build and POST a `SessionRequest` from the current snapshot. Gated on
+    /// consent (no POST when consent blocks dispatch).
+    private func postSession(
+        isFirstSession: Bool,
+        completion: @escaping (Result<AttributionResult, NetworkError>) -> Void
+    ) {
+        guard let configuration = configuration else { return }
+        let snapshot = stateSnapshot()
+        if let consent = snapshot.consent, consent.blocksDispatch {
+            Logger.debug("Consent blocks dispatch, skipping session POST")
+            return
+        }
+        let request = buildSessionRequest(isFirstSession: isFirstSession, snapshot: snapshot)
+        networkClient.sendSession(request, configuration: configuration, completion: completion)
+    }
+
+    /// Build a `SessionRequest` from the device info + current identity
+    /// snapshot. Shared by the first-launch path and the re-fire path.
+    private func buildSessionRequest(isFirstSession: Bool, snapshot: StateSnapshot) -> SessionRequest {
+        var context = deviceInfo.contextDictionary()
+        if let consent = snapshot.consent { context["consent"] = consent.contextDictionary }
+
+        return SessionRequest(
+            anonymousId: deviceInfo.anonymousId,
+            deviceId: deviceInfo.deviceId,
+            platform: "ios",
+            timestamp: ISO8601DateFormatter.pricist.string(from: Date()),
+            isFirstSession: isFirstSession,
+            sessionId: sessionId,
+            appVersion: deviceInfo.appVersion,
+            sdkVersion: Self.sdkVersion,
+            idfa: snapshot.idfa,
+            clickToken: snapshot.clickToken,
+            emailSha256: snapshot.hashedEmail,
+            phoneSha256: snapshot.hashedPhone,
+            externalIdSha256: snapshot.hashedExternalId,
+            attStatus: currentATTStatusString(),
+            context: context
+        )
+    }
+
+    // MARK: - Attribution callbacks
+
+    /// Register a callback for the attribution result. If a result has already
+    /// been resolved (cached), the callback fires immediately.
+    public func onAttribution(_ callback: @escaping AttributionCallback) {
+        let cached: AttributionResult? = {
+            stateLock.lock(); defer { stateLock.unlock() }
+            return cachedAttribution
+        }() ?? loadAttribution()
+
+        withState { self.attributionCallbacks.append(callback) }
+
+        if let cached = cached {
+            callback(cached)
+        }
+    }
+
+    private func notifyAttributionCallbacks(_ result: AttributionResult?) {
+        let callbacks: [AttributionCallback] = {
+            stateLock.lock(); defer { stateLock.unlock() }
+            return attributionCallbacks
+        }()
+        for callback in callbacks {
+            callback(result)
+        }
+    }
+
+    // MARK: - Deep-link click token
+
+    /// Set the deep-link click token directly. Included in the next session
+    /// POST as `clickToken` and triggers a debounced re-fire so the server can
+    /// claim the click. Pass `nil` to clear.
+    public func setClickToken(_ token: String?) {
+        withState { self.clickToken = token }
+        Logger.debug("Click token \(token == nil ? "cleared" : "set")")
+        markIdentifierDirty()
+    }
+
+    /// Extract a `pricist_click` query parameter from an inbound deep-link URL
+    /// and claim it via `setClickToken(_:)`. Call from your app's URL /
+    /// universal-link handler. Returns `true` when a token was found.
+    @discardableResult
+    public func handleDeepLink(url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let token = components.queryItems?.first(where: { $0.name == "pricist_click" })?.value,
+              !token.isEmpty else {
+            return false
+        }
+        setClickToken(token)
+        return true
+    }
+
+    // MARK: - Identifier debounce + re-fire
+
+    /// Mark the identity set dirty and schedule a debounced session re-fire.
+    /// No-op before `start()` (values ride the first-launch POST) and while a
+    /// re-fire is already in flight (handled on completion).
+    private func markIdentifierDirty() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.isIdentifierDirty = true
+            guard self.isStarted else { return }
+            guard !self.isReFireInFlight else { return }
+            self.scheduleDebounceOnQueue()
+        }
+    }
+
+    /// Cancel any pending debounce timer and start a fresh one. Must run on
+    /// `sessionQueue`.
+    private func scheduleDebounceOnQueue() {
+        identifierDebounceTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: sessionQueue)
+        timer.schedule(deadline: .now() + .milliseconds(Self.identifierDebounceMs))
+        timer.setEventHandler { [weak self] in
+            self?.identifierDebounceTimer = nil
+            self?.triggerReFireOnQueue()
+        }
+        identifierDebounceTimer = timer
+        timer.resume()
+    }
+
+    /// Send the re-fire if started + dirty. Must run on `sessionQueue`. Holds
+    /// the in-flight guard for the POST duration; re-schedules if a setter
+    /// fired during the window or the POST failed.
+    private func triggerReFireOnQueue() {
+        guard isStarted else { return }
+        guard isIdentifierDirty else { return }
+        guard let configuration = configuration else { return }
+
+        let snapshot = stateSnapshot()
+        if let consent = snapshot.consent, consent.blocksDispatch {
+            Logger.debug("Consent blocks dispatch, skipping session re-fire")
+            isIdentifierDirty = false
+            return
+        }
+
+        isReFireInFlight = true
+        isIdentifierDirty = false
+
+        let request = buildSessionRequest(isFirstSession: false, snapshot: snapshot)
+        networkClient.sendSession(request, configuration: configuration) { [weak self] result in
+            guard let self = self else { return }
+            self.sessionQueue.async {
+                self.isReFireInFlight = false
+                switch result {
+                case .success(let attribution):
+                    self.saveAttribution(attribution)
+                    self.withState { self.cachedAttribution = attribution }
+                    Logger.debug("Session re-fire succeeded")
+                    self.notifyAttributionCallbacks(attribution)
+                case .failure(let error):
+                    self.isIdentifierDirty = true
+                    Logger.warning("Session re-fire failed: \(error)")
+                }
+                if self.isIdentifierDirty {
+                    self.scheduleDebounceOnQueue()
+                }
+            }
+        }
+    }
+
+    // MARK: - Attribution Keychain cache
+
+    private func loadAttribution() -> AttributionResult? {
+        #if canImport(Security)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        return try? JSONDecoder().decode(AttributionResult.self, from: data)
+        #else
+        return nil
+        #endif
+    }
+
+    private func saveAttribution(_ attribution: AttributionResult) {
+        #if canImport(Security)
+        guard let data = try? JSONEncoder().encode(attribution) else {
+            Logger.warning("Failed to encode attribution for Keychain")
+            return
+        }
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.keychainAccount
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.keychainAccount,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            Logger.warning("Failed to save attribution to Keychain: \(status)")
+        }
+        #endif
     }
 
     // MARK: - ATT wait
@@ -381,22 +648,26 @@ public final class Pricist {
     public func setIDFA(_ idfa: String?) {
         withState { self.idfa = idfa }
         Logger.debug("IDFA \(idfa == nil ? "cleared" : "set")")
+        markIdentifierDirty()
     }
 
     /// Set the SHA256-hex hash of the user's normalized email. The SDK never
     /// sees the raw value.
     public func setHashedEmail(_ sha256: String?) {
         withState { self.hashedEmail = sha256 }
+        markIdentifierDirty()
     }
 
     /// Set the SHA256-hex hash of the user's normalized phone (E.164).
     public func setHashedPhone(_ sha256: String?) {
         withState { self.hashedPhone = sha256 }
+        markIdentifierDirty()
     }
 
     /// Set the SHA256-hex hash of an external user identifier (CRM / auth ID).
     public func setHashedExternalId(_ sha256: String?) {
         withState { self.hashedExternalId = sha256 }
+        markIdentifierDirty()
     }
 
     // MARK: - Consent
@@ -411,6 +682,10 @@ public final class Pricist {
         if consent.blocksDispatch {
             eventQueue.clear()
             Logger.info("Consent blocks dispatch — local event queue purged")
+        } else {
+            // Re-fire so the backend learns the new consent state without
+            // waiting for a natural session boundary.
+            markIdentifierDirty()
         }
     }
 
@@ -569,6 +844,7 @@ public final class Pricist {
         let hashedEmail: String?
         let hashedPhone: String?
         let hashedExternalId: String?
+        let clickToken: String?
     }
 
     private func stateSnapshot() -> StateSnapshot {
@@ -580,7 +856,8 @@ public final class Pricist {
             idfa: idfa,
             hashedEmail: hashedEmail,
             hashedPhone: hashedPhone,
-            hashedExternalId: hashedExternalId
+            hashedExternalId: hashedExternalId,
+            clickToken: clickToken
         )
     }
 

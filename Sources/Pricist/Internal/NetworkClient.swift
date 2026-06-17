@@ -68,6 +68,61 @@ final class NetworkClient {
         task.resume()
     }
 
+    /// Send a session to `POST /api/session` and decode the sanitized
+    /// attribution result. Carries the `x-pricist-sdk-key` header and mirrors
+    /// `sendEvent`'s status mapping (401 → `.unauthorized`, etc.).
+    func sendSession(
+        _ request: SessionRequest,
+        configuration: PricistConfiguration,
+        completion: @escaping (Result<AttributionResult, NetworkError>) -> Void
+    ) {
+        guard let url = URL(string: "\(pricistResolveBaseURL(configuration))/api/session") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(configuration.sdkKey, forHTTPHeaderField: "x-pricist-sdk-key")
+
+        do {
+            urlRequest.httpBody = try encoder.encode(request)
+        } catch {
+            completion(.failure(.encodingError(error)))
+            return
+        }
+
+        let task = session.dataTask(with: urlRequest) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError(error)))
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            if let mapped = Self.mapStatus(httpResponse.statusCode) {
+                // Non-2xx — surface the failure.
+                if case .failure(let err) = mapped { completion(.failure(err)) }
+                return
+            }
+            guard let data = data else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            do {
+                // Keys are already camelCase on the wire — no decoding strategy.
+                let result = try JSONDecoder().decode(AttributionResult.self, from: data)
+                completion(.success(result))
+            } catch {
+                completion(.failure(.encodingError(error)))
+            }
+        }
+
+        task.resume()
+    }
+
     /// Fetch remote config (feature flags) from `GET /api/sdk/config`.
     /// Returns the project's flags as a typed key/value map.
     func fetchConfig(
