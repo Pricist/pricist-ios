@@ -23,6 +23,14 @@ final class SessionTests: XCTestCase {
             phoneSha256: "phonehash",
             externalIdSha256: "extidhash",
             attStatus: "authorized",
+            screenWidth: 1179,
+            screenHeight: 2556,
+            screenScale: 3.0,
+            deviceModel: "iPhone16,2",
+            osVersion: "17.4.1",
+            locale: "en_US",
+            timezone: "America/New_York",
+            languages: "en-US,fr-FR",
             context: ["os_name": "iOS"]
         )
 
@@ -43,6 +51,14 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(json["phoneSha256"] as? String, "phonehash")
         XCTAssertEqual(json["externalIdSha256"] as? String, "extidhash")
         XCTAssertEqual(json["attStatus"] as? String, "authorized")
+        XCTAssertEqual(json["screenWidth"] as? Int, 1179)
+        XCTAssertEqual(json["screenHeight"] as? Int, 2556)
+        XCTAssertEqual(json["screenScale"] as? Double, 3.0)
+        XCTAssertEqual(json["deviceModel"] as? String, "iPhone16,2")
+        XCTAssertEqual(json["osVersion"] as? String, "17.4.1")
+        XCTAssertEqual(json["locale"] as? String, "en_US")
+        XCTAssertEqual(json["timezone"] as? String, "America/New_York")
+        XCTAssertEqual(json["languages"] as? String, "en-US,fr-FR")
         XCTAssertEqual((json["context"] as? [String: Any])?["os_name"] as? String, "iOS")
     }
 
@@ -63,6 +79,14 @@ final class SessionTests: XCTestCase {
             phoneSha256: nil,
             externalIdSha256: nil,
             attStatus: nil,
+            screenWidth: nil,
+            screenHeight: nil,
+            screenScale: nil,
+            deviceModel: nil,
+            osVersion: nil,
+            locale: nil,
+            timezone: nil,
+            languages: nil,
             context: nil
         )
 
@@ -75,6 +99,14 @@ final class SessionTests: XCTestCase {
         XCTAssertNil(json["idfa"])
         XCTAssertNil(json["clickToken"])
         XCTAssertNil(json["attStatus"])
+        XCTAssertNil(json["screenWidth"])
+        XCTAssertNil(json["screenHeight"])
+        XCTAssertNil(json["screenScale"])
+        XCTAssertNil(json["deviceModel"])
+        XCTAssertNil(json["osVersion"])
+        XCTAssertNil(json["locale"])
+        XCTAssertNil(json["timezone"])
+        XCTAssertNil(json["languages"])
         XCTAssertNil(json["context"])
     }
 

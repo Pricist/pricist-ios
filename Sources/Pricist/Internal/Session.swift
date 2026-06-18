@@ -31,6 +31,22 @@ struct SessionRequest: Encodable {
     let externalIdSha256: String?
     /// iOS ATT status: "authorized" | "denied" | "restricted" | "notDetermined".
     let attStatus: String?
+    /// Physical screen width in pixels (points × scale), for fingerprint match.
+    let screenWidth: Int?
+    /// Physical screen height in pixels (points × scale), for fingerprint match.
+    let screenHeight: Int?
+    /// Screen scale (device pixel ratio).
+    let screenScale: Double?
+    /// Exact hardware model identifier (`hw.machine`), e.g. "iPhone16,2".
+    let deviceModel: String?
+    /// OS version string, e.g. "17.4.1".
+    let osVersion: String?
+    /// Device locale identifier, e.g. "en_US".
+    let locale: String?
+    /// Device timezone identifier, e.g. "America/New_York".
+    let timezone: String?
+    /// Comma-separated preferred languages, e.g. "en-US,fr-FR".
+    let languages: String?
     /// Ambient device context. Stored verbatim by the server.
     let context: [String: Any]?
 
@@ -49,6 +65,14 @@ struct SessionRequest: Encodable {
         case phoneSha256
         case externalIdSha256
         case attStatus
+        case screenWidth
+        case screenHeight
+        case screenScale
+        case deviceModel
+        case osVersion
+        case locale
+        case timezone
+        case languages
         case context
     }
 
@@ -68,6 +92,14 @@ struct SessionRequest: Encodable {
         try c.encodeIfPresent(phoneSha256, forKey: .phoneSha256)
         try c.encodeIfPresent(externalIdSha256, forKey: .externalIdSha256)
         try c.encodeIfPresent(attStatus, forKey: .attStatus)
+        try c.encodeIfPresent(screenWidth, forKey: .screenWidth)
+        try c.encodeIfPresent(screenHeight, forKey: .screenHeight)
+        try c.encodeIfPresent(screenScale, forKey: .screenScale)
+        try c.encodeIfPresent(deviceModel, forKey: .deviceModel)
+        try c.encodeIfPresent(osVersion, forKey: .osVersion)
+        try c.encodeIfPresent(locale, forKey: .locale)
+        try c.encodeIfPresent(timezone, forKey: .timezone)
+        try c.encodeIfPresent(languages, forKey: .languages)
         if let context = context {
             try c.encode(AnyCodable(context), forKey: .context)
         }

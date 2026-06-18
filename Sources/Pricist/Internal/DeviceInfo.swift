@@ -64,6 +64,63 @@ struct DeviceInfo {
         #endif
     }
 
+    /// Exact hardware model identifier (e.g. "iPhone16,2") via `hw.machine`.
+    /// Unlike `UIDevice.current.model` (which is just "iPhone"), this is the
+    /// precise hardware string the server can fingerprint against a web client.
+    /// On the simulator this returns the simulated device identifier.
+    var deviceModelIdentifier: String {
+        #if targetEnvironment(simulator)
+        if let simId = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"],
+           !simId.isEmpty {
+            return simId
+        }
+        #endif
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        guard size > 0 else { return "" }
+        var machine = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &machine, &size, nil, 0)
+        return String(cString: machine)
+    }
+
+    /// Physical screen width in pixels (points × scale). Matches the web's
+    /// `screen.width * devicePixelRatio`. 0 where UIScreen is unavailable.
+    var screenWidthPx: Int {
+        #if canImport(UIKit) && !os(watchOS)
+        let bounds = UIScreen.main.bounds
+        let scale = UIScreen.main.scale
+        return Int((bounds.width * scale).rounded())
+        #else
+        return 0
+        #endif
+    }
+
+    /// Physical screen height in pixels (points × scale). Matches the web's
+    /// `screen.height * devicePixelRatio`. 0 where UIScreen is unavailable.
+    var screenHeightPx: Int {
+        #if canImport(UIKit) && !os(watchOS)
+        let bounds = UIScreen.main.bounds
+        let scale = UIScreen.main.scale
+        return Int((bounds.height * scale).rounded())
+        #else
+        return 0
+        #endif
+    }
+
+    /// Screen scale (device pixel ratio). 0 where UIScreen is unavailable.
+    var screenScale: Double {
+        #if canImport(UIKit) && !os(watchOS)
+        return Double(UIScreen.main.scale)
+        #else
+        return 0
+        #endif
+    }
+
+    /// Comma-separated preferred languages (BCP-47), e.g. "en-US,fr-FR".
+    var languages: String {
+        Locale.preferredLanguages.joined(separator: ",")
+    }
+
     /// App version (CFBundleShortVersionString).
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"

@@ -244,6 +244,14 @@ public final class Pricist {
             phoneSha256: snapshot.hashedPhone,
             externalIdSha256: snapshot.hashedExternalId,
             attStatus: currentATTStatusString(),
+            screenWidth: deviceInfo.screenWidthPx,
+            screenHeight: deviceInfo.screenHeightPx,
+            screenScale: deviceInfo.screenScale,
+            deviceModel: deviceInfo.deviceModelIdentifier,
+            osVersion: deviceInfo.osVersion,
+            locale: deviceInfo.locale,
+            timezone: deviceInfo.timezone,
+            languages: deviceInfo.languages,
             context: context
         )
     }
