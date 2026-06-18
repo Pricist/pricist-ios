@@ -1,6 +1,6 @@
 import Foundation
 
-let pricistDefaultBaseURL = "https://api.pricist.com"
+let pricistDefaultBaseURL = "https://api.pricist.dev"
 
 /// Resolve the SDK base host (no trailing slash, no path). `host` is also
 /// trimmed at construction time, but we re-trim here so a hand-set override

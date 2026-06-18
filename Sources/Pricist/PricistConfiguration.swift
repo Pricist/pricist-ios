@@ -27,7 +27,7 @@ public struct PricistConfiguration {
     public var maxBatchSize: Int
 
     /// Optional override for the API host root. When `nil`, the SDK uses
-    /// the production endpoint (`https://api.pricist.com`). The SDK appends
+    /// the production endpoint (`https://api.pricist.dev`). The SDK appends
     /// the path itself (`/api/track`, `/api/sdk/config`), so pass the host
     /// root only — e.g. `http://localhost:3000` from the iOS simulator
     /// pointing at a webapp running on the host machine. Trailing slashes

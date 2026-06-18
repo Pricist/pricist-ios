@@ -70,7 +70,7 @@ let config = PricistConfiguration(sdkKey: "pk_live_…")
 
 ### API host
 
-By default the SDK calls `https://api.pricist.com` and appends `/api/track`
+By default the SDK calls `https://api.pricist.dev` and appends `/api/track`
 and `/api/sdk/config`. Pass `host` to point at a different origin — typically a
 webapp running on your dev machine. From the iOS simulator, `localhost` is the
 host machine:
