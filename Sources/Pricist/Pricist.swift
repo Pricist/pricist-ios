@@ -27,6 +27,13 @@ public final class Pricist {
     /// SDK version, sent on every event as `sdkVersion`.
     public static let sdkVersion = "0.1.0"
 
+    // NOTE: `configuration`, `isEnabled`, `isStarted`, and `sessionId` are set
+    // once during initialize/start (on the caller's thread, typically main) and
+    // thereafter only read from the flush timer / lifecycle / sessionQueue
+    // paths. Reads are not lock-guarded; this is a deliberate trade-off (plain
+    // Bool/reference reads are benign here, and guarding them would entangle
+    // with stateLock/sessionQueue). If these ever become re-assignable at
+    // runtime, move them under stateLock.
     private var configuration: PricistConfiguration?
     private var isEnabled = true
     private var isStarted = false
@@ -213,10 +220,14 @@ public final class Pricist {
         isFirstSession: Bool,
         completion: @escaping (Result<AttributionResult, NetworkError>) -> Void
     ) {
-        guard let configuration = configuration else { return }
+        guard let configuration = configuration else {
+            completion(.failure(.invalidResponse))
+            return
+        }
         let snapshot = stateSnapshot()
         if let consent = snapshot.consent, consent.blocksDispatch {
             Logger.debug("Consent blocks dispatch, skipping session POST")
+            completion(.failure(.invalidResponse))
             return
         }
         let request = buildSessionRequest(isFirstSession: isFirstSession, snapshot: snapshot)
@@ -260,6 +271,11 @@ public final class Pricist {
 
     /// Register a callback for the attribution result. If a result has already
     /// been resolved (cached), the callback fires immediately.
+    // NOTE: There is a narrow race here — if attribution resolves between the
+    // cache read below and the callback registration, a caller could be invoked
+    // twice (once from the cache hit, once from notifyAttributionCallbacks).
+    // Left as-is: harmless (same value), and de-duping would require a "fired"
+    // ledger that's overkill for this rare window.
     public func onAttribution(_ callback: @escaping AttributionCallback) {
         let cached: AttributionResult? = {
             stateLock.lock(); defer { stateLock.unlock() }
@@ -721,7 +737,7 @@ public final class Pricist {
     /// has already loaded, the callback fires immediately.
     public func onConfigLoaded(_ callback: @escaping ConfigLoadedCallback) {
         let current = getAllConfig()
-        configCallbacks.append(callback)
+        withState { self.configCallbacks.append(callback) }
         if !current.isEmpty {
             callback(current)
         }
@@ -762,7 +778,11 @@ public final class Pricist {
     }
 
     private func notifyConfigCallbacks(_ config: [String: Any]) {
-        for callback in configCallbacks {
+        let callbacks: [ConfigLoadedCallback] = {
+            stateLock.lock(); defer { stateLock.unlock() }
+            return configCallbacks
+        }()
+        for callback in callbacks {
             callback(config)
         }
     }

@@ -12,16 +12,17 @@ struct DeviceInfo {
     private let anonymousIdKey = "com.pricist.anonymousId"
     private let deviceIdKey = "com.pricist.deviceId"
 
+    // Serializes the read-or-generate of the persisted identifiers so two
+    // concurrent first accesses (e.g. an event build and the session build on
+    // different threads) can't generate two different UUIDs and race their
+    // writes to UserDefaults.
+    private static let idLock = NSLock()
+
     /// Stable anonymous identifier for this install. Generated once and
     /// persisted; survives until the app is deleted. Used as `anonymousId`
     /// on every event and as the identity fallback before `setUserId`.
     var anonymousId: String {
-        if let stored = UserDefaults.standard.string(forKey: anonymousIdKey) {
-            return stored
-        }
-        let newId = UUID().uuidString
-        UserDefaults.standard.set(newId, forKey: anonymousIdKey)
-        return newId
+        Self.getOrCreatePersistedId(forKey: anonymousIdKey)
     }
 
     /// Unique device identifier (IDFV when available, else a generated UUID).
@@ -153,17 +154,27 @@ struct DeviceInfo {
     // MARK: - Private
 
     private func getOrCreateDeviceId() -> String {
-        if let stored = UserDefaults.standard.string(forKey: deviceIdKey) {
+        Self.getOrCreatePersistedId(forKey: deviceIdKey)
+    }
+
+    /// Atomically read a persisted identifier, generating and storing one on
+    /// first access. Guarded by `idLock` so concurrent callers agree on a
+    /// single value.
+    private static func getOrCreatePersistedId(forKey key: String) -> String {
+        idLock.lock()
+        defer { idLock.unlock() }
+        if let stored = UserDefaults.standard.string(forKey: key) {
             return stored
         }
         let newId = UUID().uuidString
-        UserDefaults.standard.set(newId, forKey: deviceIdKey)
+        UserDefaults.standard.set(newId, forKey: key)
         return newId
     }
 
     private func getDeviceModelIdentifier() -> String {
         var size = 0
         sysctlbyname("hw.model", nil, &size, nil, 0)
+        guard size > 0 else { return "" }
         var model = [CChar](repeating: 0, count: size)
         sysctlbyname("hw.model", &model, &size, nil, 0)
         return String(cString: model)

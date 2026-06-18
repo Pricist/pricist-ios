@@ -32,11 +32,16 @@ public struct PricistRevenue {
     /// strings). No grouping separator so the value parses as a plain number.
     internal func amountString() -> String {
         let formatter = NumberFormatter()
+        // Pin to en_US_POSIX so the decimal separator is always '.' and no
+        // grouping is applied, regardless of the device's current locale.
+        // Without this, a device set to e.g. German would emit "29,99".
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 6
         formatter.groupingSeparator = ""
         formatter.decimalSeparator = "."
+        formatter.roundingMode = .halfUp
         return formatter.string(from: amount as NSDecimalNumber) ?? "0.00"
     }
 }

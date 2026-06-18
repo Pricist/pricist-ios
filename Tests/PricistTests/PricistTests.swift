@@ -77,6 +77,63 @@ final class PricistTests: XCTestCase {
         XCTAssertEqual(PricistRevenue.usd(9.9).amountString(), "9.90")
     }
 
+    /// Large amounts must not pick up a grouping separator.
+    func testRevenueNoGroupingSeparator() {
+        XCTAssertEqual(PricistRevenue.usd(1234567.89).amountString(), "1234567.89")
+    }
+
+    /// The decimal separator must always be '.' regardless of host locale.
+    /// Previously the formatter used the current locale, so a German device
+    /// would emit "29,99" and the backend's numeric parse would break.
+    func testRevenueDecimalSeparatorIsAlwaysDot() {
+        let amount = PricistRevenue.eur(29.99).amountString()
+        XCTAssertEqual(amount, "29.99")
+        XCTAssertFalse(amount.contains(","))
+    }
+
+    /// Sub-cent precision is preserved up to 6 fraction digits.
+    func testRevenuePreservesPrecision() {
+        XCTAssertEqual(PricistRevenue.usd(Decimal(string: "0.123456")!).amountString(), "0.123456")
+        XCTAssertEqual(PricistRevenue.usd(Decimal(0)).amountString(), "0.00")
+    }
+
+    // MARK: - Device identifiers
+
+    /// anonymousId / deviceId must be stable across repeated accesses and
+    /// across separate DeviceInfo instances (they back the persisted identity).
+    func testDeviceIdentifiersAreStable() {
+        let info = DeviceInfo()
+        let anon1 = info.anonymousId
+        let anon2 = info.anonymousId
+        XCTAssertEqual(anon1, anon2)
+        XCTAssertFalse(anon1.isEmpty)
+
+        // A fresh instance reads the same persisted value.
+        XCTAssertEqual(DeviceInfo().anonymousId, anon1)
+    }
+
+    /// Concurrent first-access must not generate two different anonymousIds.
+    /// (Guards the read-or-create race fixed by DeviceInfo.idLock.)
+    func testAnonymousIdConcurrentAccessIsConsistent() {
+        // Clear any previously persisted value so this exercises generation.
+        UserDefaults.standard.removeObject(forKey: "com.pricist.anonymousId")
+
+        let info = DeviceInfo()
+        let results = NSMutableSet()
+        let resultsLock = NSLock()
+        let group = DispatchGroup()
+        for _ in 0..<50 {
+            group.enter()
+            DispatchQueue.global().async {
+                let id = info.anonymousId
+                resultsLock.lock(); results.add(id); resultsLock.unlock()
+                group.leave()
+            }
+        }
+        group.wait()
+        XCTAssertEqual(results.count, 1, "concurrent access produced multiple anonymousIds")
+    }
+
     // MARK: - Event Parameters
 
     func testEventParametersEmpty() {
