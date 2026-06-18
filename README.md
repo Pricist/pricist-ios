@@ -9,12 +9,12 @@ attribution can be layered on later without changing your call sites.
 
 ### Swift Package Manager
 
-In Xcode: **File → Add Package Dependencies…** and enter the repo URL, or add
-to your `Package.swift`:
+In Xcode: **File → Add Package Dependencies…** and enter
+`https://github.com/Pricist/pricist-ios`, or add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/connorburd/pricist", from: "0.1.0")
+    .package(url: "https://github.com/Pricist/pricist-ios", from: "0.1.0")
 ]
 ```
 
@@ -24,8 +24,7 @@ Then add `Pricist` to your target dependencies:
 .target(name: "MyApp", dependencies: ["Pricist"])
 ```
 
-> The SDK product/module is `Pricist`. If you point SPM at the monorepo root,
-> the package manifest lives in `ios-sdk/`.
+> The SDK product/module is `Pricist`.
 
 ## Quick Start
 
