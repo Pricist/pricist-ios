@@ -132,6 +132,32 @@ struct DeviceInfo {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
     }
 
+    /// App bundle identifier (e.g. "com.acme.app"). Empty when unavailable.
+    var bundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? ""
+    }
+
+    /// Logical CPU core count, for Meta CAPI `extinfo` device fingerprinting.
+    var cpuCores: Int {
+        ProcessInfo.processInfo.processorCount
+    }
+
+    /// Total disk capacity in GB (integer, decimal GB), 0 on error.
+    var totalDiskGb: Int {
+        diskCapacityGb(.systemSize)
+    }
+
+    /// Free (available) disk capacity in GB (integer, decimal GB), 0 on error.
+    var freeDiskGb: Int {
+        diskCapacityGb(.systemFreeSize)
+    }
+
+    /// Cellular carrier name. Modern iOS no longer exposes this reliably (the
+    /// CoreTelephony APIs are deprecated and return empty), so this is a
+    /// best-effort empty string by design — the field is still sent so the
+    /// backend's `extinfo` envelope has a stable slot for it.
+    let carrier: String = ""
+
     /// User locale.
     var locale: String {
         Locale.current.identifier
@@ -169,6 +195,16 @@ struct DeviceInfo {
         let newId = UUID().uuidString
         UserDefaults.standard.set(newId, forKey: key)
         return newId
+    }
+
+    /// Read a file-system capacity attribute (in bytes) for the home volume and
+    /// convert to decimal GB (÷1e9). Non-throwing — returns 0 on any error.
+    private func diskCapacityGb(_ key: FileAttributeKey) -> Int {
+        guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory()),
+              let bytes = (attrs[key] as? NSNumber)?.int64Value else {
+            return 0
+        }
+        return Int(bytes / 1_000_000_000)
     }
 
     private func getDeviceModelIdentifier() -> String {

@@ -22,6 +22,13 @@ final class SessionTests: XCTestCase {
             emailSha256: "emailhash",
             phoneSha256: "phonehash",
             externalIdSha256: "extidhash",
+            firstNameSha256: "firstnamehash",
+            lastNameSha256: "lastnamehash",
+            citySha256: "cityhash",
+            stateSha256: "statehash",
+            zipSha256: "ziphash",
+            dobSha256: "dobhash",
+            genderSha256: "genderhash",
             attStatus: "authorized",
             screenWidth: 1179,
             screenHeight: 2556,
@@ -31,6 +38,12 @@ final class SessionTests: XCTestCase {
             locale: "en_US",
             timezone: "America/New_York",
             languages: "en-US,fr-FR",
+            bundleId: "com.acme.app",
+            appBuild: "42",
+            carrier: "",
+            cpuCores: 6,
+            totalDiskGb: 256,
+            freeDiskGb: 128,
             context: ["os_name": "iOS"]
         )
 
@@ -50,6 +63,13 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(json["emailSha256"] as? String, "emailhash")
         XCTAssertEqual(json["phoneSha256"] as? String, "phonehash")
         XCTAssertEqual(json["externalIdSha256"] as? String, "extidhash")
+        XCTAssertEqual(json["firstNameSha256"] as? String, "firstnamehash")
+        XCTAssertEqual(json["lastNameSha256"] as? String, "lastnamehash")
+        XCTAssertEqual(json["citySha256"] as? String, "cityhash")
+        XCTAssertEqual(json["stateSha256"] as? String, "statehash")
+        XCTAssertEqual(json["zipSha256"] as? String, "ziphash")
+        XCTAssertEqual(json["dobSha256"] as? String, "dobhash")
+        XCTAssertEqual(json["genderSha256"] as? String, "genderhash")
         XCTAssertEqual(json["attStatus"] as? String, "authorized")
         XCTAssertEqual(json["screenWidth"] as? Int, 1179)
         XCTAssertEqual(json["screenHeight"] as? Int, 2556)
@@ -59,6 +79,12 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(json["locale"] as? String, "en_US")
         XCTAssertEqual(json["timezone"] as? String, "America/New_York")
         XCTAssertEqual(json["languages"] as? String, "en-US,fr-FR")
+        XCTAssertEqual(json["bundleId"] as? String, "com.acme.app")
+        XCTAssertEqual(json["appBuild"] as? String, "42")
+        XCTAssertEqual(json["carrier"] as? String, "")
+        XCTAssertEqual(json["cpuCores"] as? Int, 6)
+        XCTAssertEqual(json["totalDiskGb"] as? Int, 256)
+        XCTAssertEqual(json["freeDiskGb"] as? Int, 128)
         XCTAssertEqual((json["context"] as? [String: Any])?["os_name"] as? String, "iOS")
     }
 
@@ -78,6 +104,13 @@ final class SessionTests: XCTestCase {
             emailSha256: nil,
             phoneSha256: nil,
             externalIdSha256: nil,
+            firstNameSha256: nil,
+            lastNameSha256: nil,
+            citySha256: nil,
+            stateSha256: nil,
+            zipSha256: nil,
+            dobSha256: nil,
+            genderSha256: nil,
             attStatus: nil,
             screenWidth: nil,
             screenHeight: nil,
@@ -87,6 +120,12 @@ final class SessionTests: XCTestCase {
             locale: nil,
             timezone: nil,
             languages: nil,
+            bundleId: nil,
+            appBuild: nil,
+            carrier: nil,
+            cpuCores: nil,
+            totalDiskGb: nil,
+            freeDiskGb: nil,
             context: nil
         )
 
@@ -98,6 +137,13 @@ final class SessionTests: XCTestCase {
         XCTAssertNil(json["sessionId"])
         XCTAssertNil(json["idfa"])
         XCTAssertNil(json["clickToken"])
+        XCTAssertNil(json["firstNameSha256"])
+        XCTAssertNil(json["lastNameSha256"])
+        XCTAssertNil(json["citySha256"])
+        XCTAssertNil(json["stateSha256"])
+        XCTAssertNil(json["zipSha256"])
+        XCTAssertNil(json["dobSha256"])
+        XCTAssertNil(json["genderSha256"])
         XCTAssertNil(json["attStatus"])
         XCTAssertNil(json["screenWidth"])
         XCTAssertNil(json["screenHeight"])
@@ -107,6 +153,12 @@ final class SessionTests: XCTestCase {
         XCTAssertNil(json["locale"])
         XCTAssertNil(json["timezone"])
         XCTAssertNil(json["languages"])
+        XCTAssertNil(json["bundleId"])
+        XCTAssertNil(json["appBuild"])
+        XCTAssertNil(json["carrier"])
+        XCTAssertNil(json["cpuCores"])
+        XCTAssertNil(json["totalDiskGb"])
+        XCTAssertNil(json["freeDiskGb"])
         XCTAssertNil(json["context"])
     }
 

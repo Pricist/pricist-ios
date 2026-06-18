@@ -63,6 +63,13 @@ public final class Pricist {
     private var hashedEmail: String?
     private var hashedPhone: String?
     private var hashedExternalId: String?
+    private var hashedFirstName: String?
+    private var hashedLastName: String?
+    private var hashedCity: String?
+    private var hashedState: String?
+    private var hashedZip: String?
+    private var hashedDateOfBirth: String?
+    private var hashedGender: String?
     // Deep-link click token (`pricist_click`) claimed from an inbound URL.
     private var clickToken: String?
 
@@ -254,6 +261,13 @@ public final class Pricist {
             emailSha256: snapshot.hashedEmail,
             phoneSha256: snapshot.hashedPhone,
             externalIdSha256: snapshot.hashedExternalId,
+            firstNameSha256: snapshot.hashedFirstName,
+            lastNameSha256: snapshot.hashedLastName,
+            citySha256: snapshot.hashedCity,
+            stateSha256: snapshot.hashedState,
+            zipSha256: snapshot.hashedZip,
+            dobSha256: snapshot.hashedDateOfBirth,
+            genderSha256: snapshot.hashedGender,
             attStatus: currentATTStatusString(),
             screenWidth: deviceInfo.screenWidthPx,
             screenHeight: deviceInfo.screenHeightPx,
@@ -263,6 +277,12 @@ public final class Pricist {
             locale: deviceInfo.locale,
             timezone: deviceInfo.timezone,
             languages: deviceInfo.languages,
+            bundleId: deviceInfo.bundleIdentifier,
+            appBuild: deviceInfo.appBuild,
+            carrier: deviceInfo.carrier,
+            cpuCores: deviceInfo.cpuCores,
+            totalDiskGb: deviceInfo.totalDiskGb,
+            freeDiskGb: deviceInfo.freeDiskGb,
             context: context
         )
     }
@@ -694,6 +714,62 @@ public final class Pricist {
         markIdentifierDirty()
     }
 
+    /// Set the SHA256-hex hash of the user's normalized first name. The host
+    /// MUST normalize before hashing for Meta match: lowercase, trim, strip
+    /// punctuation & whitespace, UTF-8, then sha256.
+    public func setHashedFirstName(_ sha256: String?) {
+        withState { self.hashedFirstName = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized last name. The host
+    /// MUST normalize before hashing for Meta match: lowercase, trim, strip
+    /// punctuation & whitespace, UTF-8, then sha256.
+    public func setHashedLastName(_ sha256: String?) {
+        withState { self.hashedLastName = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized city. The host MUST
+    /// normalize before hashing for Meta match: lowercase, remove spaces &
+    /// punctuation, then sha256.
+    public func setHashedCity(_ sha256: String?) {
+        withState { self.hashedCity = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized state/region. The host
+    /// MUST normalize before hashing for Meta match: 2-letter region/state
+    /// code, lowercased (e.g. "ca"), then sha256.
+    public func setHashedState(_ sha256: String?) {
+        withState { self.hashedState = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized zip/postal code. The
+    /// host MUST normalize before hashing for Meta match: lowercase; for US use
+    /// the first 5 digits, then sha256.
+    public func setHashedZip(_ sha256: String?) {
+        withState { self.hashedZip = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized date of birth. The host
+    /// MUST normalize before hashing for Meta match: "YYYYMMDD" format, then
+    /// sha256.
+    public func setHashedDateOfBirth(_ sha256: String?) {
+        withState { self.hashedDateOfBirth = sha256 }
+        markIdentifierDirty()
+    }
+
+    /// Set the SHA256-hex hash of the user's normalized gender. The host MUST
+    /// normalize before hashing for Meta match: single char "m" or "f",
+    /// lowercased, then sha256.
+    public func setHashedGender(_ sha256: String?) {
+        withState { self.hashedGender = sha256 }
+        markIdentifierDirty()
+    }
+
     // MARK: - Consent
 
     /// Record the user's GDPR / DMA consent decision. When consent blocks
@@ -872,6 +948,13 @@ public final class Pricist {
         let hashedEmail: String?
         let hashedPhone: String?
         let hashedExternalId: String?
+        let hashedFirstName: String?
+        let hashedLastName: String?
+        let hashedCity: String?
+        let hashedState: String?
+        let hashedZip: String?
+        let hashedDateOfBirth: String?
+        let hashedGender: String?
         let clickToken: String?
     }
 
@@ -885,6 +968,13 @@ public final class Pricist {
             hashedEmail: hashedEmail,
             hashedPhone: hashedPhone,
             hashedExternalId: hashedExternalId,
+            hashedFirstName: hashedFirstName,
+            hashedLastName: hashedLastName,
+            hashedCity: hashedCity,
+            hashedState: hashedState,
+            hashedZip: hashedZip,
+            hashedDateOfBirth: hashedDateOfBirth,
+            hashedGender: hashedGender,
             clickToken: clickToken
         )
     }

@@ -29,6 +29,27 @@ struct SessionRequest: Encodable {
     let phoneSha256: String?
     /// SHA256-hex of an external user identifier (CRM / auth user ID).
     let externalIdSha256: String?
+    /// SHA256-hex of normalized first name (lowercased, trimmed, punctuation &
+    /// whitespace stripped pre-hash). Pre-hashed by the host.
+    let firstNameSha256: String?
+    /// SHA256-hex of normalized last name (lowercased, trimmed, punctuation &
+    /// whitespace stripped pre-hash). Pre-hashed by the host.
+    let lastNameSha256: String?
+    /// SHA256-hex of normalized city (lowercased, spaces & punctuation removed
+    /// pre-hash). Pre-hashed by the host.
+    let citySha256: String?
+    /// SHA256-hex of normalized 2-letter region/state code (lowercased, e.g.
+    /// "ca" pre-hash). Pre-hashed by the host.
+    let stateSha256: String?
+    /// SHA256-hex of normalized zip/postal code (lowercased; US = first 5 digits
+    /// pre-hash). Pre-hashed by the host.
+    let zipSha256: String?
+    /// SHA256-hex of date of birth in "YYYYMMDD" format pre-hash. Pre-hashed by
+    /// the host.
+    let dobSha256: String?
+    /// SHA256-hex of gender as single char "m"/"f" (lowercased pre-hash).
+    /// Pre-hashed by the host.
+    let genderSha256: String?
     /// iOS ATT status: "authorized" | "denied" | "restricted" | "notDetermined".
     let attStatus: String?
     /// Physical screen width in pixels (points × scale), for fingerprint match.
@@ -47,6 +68,18 @@ struct SessionRequest: Encodable {
     let timezone: String?
     /// Comma-separated preferred languages, e.g. "en-US,fr-FR".
     let languages: String?
+    /// App bundle identifier, e.g. "com.acme.app". For Meta CAPI `extinfo`.
+    let bundleId: String?
+    /// App build number (CFBundleVersion), e.g. "42".
+    let appBuild: String?
+    /// Cellular carrier name; best-effort (empty on modern iOS).
+    let carrier: String?
+    /// Logical CPU core count.
+    let cpuCores: Int?
+    /// Total disk capacity in GB (integer, decimal GB).
+    let totalDiskGb: Int?
+    /// Free (available) disk capacity in GB (integer, decimal GB).
+    let freeDiskGb: Int?
     /// Ambient device context. Stored verbatim by the server.
     let context: [String: Any]?
 
@@ -64,6 +97,13 @@ struct SessionRequest: Encodable {
         case emailSha256
         case phoneSha256
         case externalIdSha256
+        case firstNameSha256
+        case lastNameSha256
+        case citySha256
+        case stateSha256
+        case zipSha256
+        case dobSha256
+        case genderSha256
         case attStatus
         case screenWidth
         case screenHeight
@@ -73,6 +113,12 @@ struct SessionRequest: Encodable {
         case locale
         case timezone
         case languages
+        case bundleId
+        case appBuild
+        case carrier
+        case cpuCores
+        case totalDiskGb
+        case freeDiskGb
         case context
     }
 
@@ -91,6 +137,13 @@ struct SessionRequest: Encodable {
         try c.encodeIfPresent(emailSha256, forKey: .emailSha256)
         try c.encodeIfPresent(phoneSha256, forKey: .phoneSha256)
         try c.encodeIfPresent(externalIdSha256, forKey: .externalIdSha256)
+        try c.encodeIfPresent(firstNameSha256, forKey: .firstNameSha256)
+        try c.encodeIfPresent(lastNameSha256, forKey: .lastNameSha256)
+        try c.encodeIfPresent(citySha256, forKey: .citySha256)
+        try c.encodeIfPresent(stateSha256, forKey: .stateSha256)
+        try c.encodeIfPresent(zipSha256, forKey: .zipSha256)
+        try c.encodeIfPresent(dobSha256, forKey: .dobSha256)
+        try c.encodeIfPresent(genderSha256, forKey: .genderSha256)
         try c.encodeIfPresent(attStatus, forKey: .attStatus)
         try c.encodeIfPresent(screenWidth, forKey: .screenWidth)
         try c.encodeIfPresent(screenHeight, forKey: .screenHeight)
@@ -100,6 +153,12 @@ struct SessionRequest: Encodable {
         try c.encodeIfPresent(locale, forKey: .locale)
         try c.encodeIfPresent(timezone, forKey: .timezone)
         try c.encodeIfPresent(languages, forKey: .languages)
+        try c.encodeIfPresent(bundleId, forKey: .bundleId)
+        try c.encodeIfPresent(appBuild, forKey: .appBuild)
+        try c.encodeIfPresent(carrier, forKey: .carrier)
+        try c.encodeIfPresent(cpuCores, forKey: .cpuCores)
+        try c.encodeIfPresent(totalDiskGb, forKey: .totalDiskGb)
+        try c.encodeIfPresent(freeDiskGb, forKey: .freeDiskGb)
         if let context = context {
             try c.encode(AnyCodable(context), forKey: .context)
         }
