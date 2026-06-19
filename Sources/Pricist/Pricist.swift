@@ -77,6 +77,11 @@ public final class Pricist {
     // normally (opt-in / track-by-default model).
     private var consent: PricistConsent?
 
+    // Experiment decisions, keyed by experimentKey. The latest assigned one is
+    // auto-attached to events. Guarded by stateLock.
+    private var activeDecisions: [String: PricistDecision] = [:]
+    private var latestDecisionKey: String?
+
     private var configCallbacks: [ConfigLoadedCallback] = []
 
     // MARK: - Attribution state
@@ -590,6 +595,21 @@ public final class Pricist {
         // No FX in the SDK: only fill revenueUsd when the charge is already USD.
         let revenueUsd = (revenue?.currency == "USD") ? revenue?.amountString() : nil
 
+        // Auto-attach the active experiment decision when the caller didn't pass
+        // one explicitly: experimentId/variantId become first-class dimensions,
+        // and the branch + collected variables ride in the properties bag.
+        var properties = parameters?.dictionary ?? [:]
+        var experimentId = dimensions?.experimentId
+        var variantId = dimensions?.variantId
+        if experimentId == nil, let decision = currentLatestDecision() {
+            experimentId = decision.experimentId
+            variantId = decision.variantId
+            if let branch = decision.branch { properties["experiment_branch"] = branch }
+            for (key, value) in decision.variables where properties[key] == nil {
+                properties[key] = value
+            }
+        }
+
         return PricistEvent(
             eventId: UUID().uuidString,
             eventName: name,
@@ -603,12 +623,12 @@ public final class Pricist {
             environment: configuration.environment,
             country: deviceInfo.country,
             context: context,
-            properties: parameters?.dictionary ?? [:],
+            properties: properties,
             productId: dimensions?.productId,
             offeringId: dimensions?.offeringId,
             paywallId: dimensions?.paywallId,
-            experimentId: dimensions?.experimentId,
-            variantId: dimensions?.variantId,
+            experimentId: experimentId,
+            variantId: variantId,
             entitlementId: dimensions?.entitlementId,
             placement: dimensions?.placement,
             revenueAmount: revenueAmount,
@@ -616,6 +636,102 @@ public final class Pricist {
             revenueUsd: revenueUsd,
             revenuecatUserId: nil
         )
+    }
+
+    // MARK: - Experiments
+
+    /// Request an experiment decision. Calls `POST /api/decision`, returns the
+    /// assigned variant (or `.notAssigned` when the experiment isn't running /
+    /// the user isn't eligible / offline-without-cache), and caches the sticky
+    /// result so it survives relaunches. The decision is auto-attached to
+    /// subsequent events. Call this once the branch-determining variables (e.g.
+    /// an onboarding answer) are known — the first call locks the assignment.
+    public func decide(
+        _ experimentKey: String,
+        variables: [String: Any] = [:],
+        completion: @escaping (PricistDecision) -> Void
+    ) {
+        guard let configuration = configuration else {
+            Logger.error("Pricist not initialized. Call initialize(with:) first.")
+            completion(.notAssigned)
+            return
+        }
+        let identity = stateSnapshot().userId ?? deviceInfo.anonymousId
+        networkClient.fetchDecision(
+            experimentKey: experimentKey,
+            identity: identity,
+            variables: variables,
+            configuration: configuration
+        ) { [weak self] result in
+            guard let self = self else { completion(.notAssigned); return }
+            switch result {
+            case .success(let json):
+                let decision = Self.parseDecision(json)
+                self.storeDecision(experimentKey, decision)
+                self.cacheDecisionJSON(experimentKey, json)
+                completion(decision)
+            case .failure(let error):
+                Logger.debug("decide(\(experimentKey)) failed (\(error)); using cache/default")
+                if let cached = self.cachedDecision(experimentKey) {
+                    self.storeDecision(experimentKey, cached)
+                    completion(cached)
+                } else {
+                    completion(.notAssigned)
+                }
+            }
+        }
+    }
+
+    /// `async` variant of `decide(_:variables:completion:)`.
+    @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
+    public func decide(_ experimentKey: String, variables: [String: Any] = [:]) async -> PricistDecision {
+        await withCheckedContinuation { continuation in
+            decide(experimentKey, variables: variables) { continuation.resume(returning: $0) }
+        }
+    }
+
+    private static func parseDecision(_ json: [String: Any]) -> PricistDecision {
+        guard (json["assigned"] as? Bool) == true else { return .notAssigned }
+        let context = json["context"] as? [String: Any]
+        return PricistDecision(
+            assigned: true,
+            experimentId: json["experimentId"] as? String,
+            variantId: json["variantId"] as? String,
+            branch: json["branch"] as? String,
+            payload: json["payload"] as? [String: Any] ?? [:],
+            variables: (context?["variables"] as? [String: Any]) ?? [:]
+        )
+    }
+
+    private func storeDecision(_ key: String, _ decision: PricistDecision) {
+        withState {
+            self.activeDecisions[key] = decision
+            if decision.assigned { self.latestDecisionKey = key }
+        }
+    }
+
+    private func decisionCacheKey(_ key: String) -> String { "com.pricist.decision.\(key)" }
+
+    private func cacheDecisionJSON(_ key: String, _ json: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: json) else { return }
+        UserDefaults.standard.set(data, forKey: decisionCacheKey(key))
+    }
+
+    private func cachedDecision(_ key: String) -> PricistDecision? {
+        guard let data = UserDefaults.standard.data(forKey: decisionCacheKey(key)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let decision = Self.parseDecision(json)
+        return decision.assigned ? decision : nil
+    }
+
+    /// The most-recent assigned decision, auto-attached to events that don't
+    /// already carry an explicit experiment.
+    private func currentLatestDecision() -> PricistDecision? {
+        stateLock.lock(); defer { stateLock.unlock() }
+        if let key = latestDecisionKey, let decision = activeDecisions[key], decision.assigned {
+            return decision
+        }
+        return nil
     }
 
     // MARK: - Control

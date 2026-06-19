@@ -165,6 +165,62 @@ final class NetworkClient {
         task.resume()
     }
 
+    /// Request an experiment decision from `POST /api/decision`. Returns the
+    /// raw JSON (`payload` is dynamic, so we don't Codable-decode it). Mirrors
+    /// the key header + status mapping of the other calls.
+    func fetchDecision(
+        experimentKey: String,
+        identity: String,
+        variables: [String: Any],
+        configuration: PricistConfiguration,
+        completion: @escaping (Result<[String: Any], NetworkError>) -> Void
+    ) {
+        guard let url = URL(string: "\(pricistResolveBaseURL(configuration))/api/decision") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(configuration.sdkKey, forHTTPHeaderField: "x-pricist-sdk-key")
+
+        let body: [String: Any] = [
+            "experimentKey": experimentKey,
+            "identity": identity,
+            "variables": variables,
+        ]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(.encodingError(error)))
+            return
+        }
+
+        let task = session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError(error)))
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            if let mapped = Self.mapStatus(httpResponse.statusCode) {
+                if case .failure(let err) = mapped { completion(.failure(err)) }
+                return
+            }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            completion(.success(json))
+        }
+
+        task.resume()
+    }
+
     /// Map an HTTP status to a `NetworkError` result. Returns `nil` for 2xx
     /// (let the caller decide the success payload).
     private static func mapStatus(_ code: Int) -> Result<Void, NetworkError>? {

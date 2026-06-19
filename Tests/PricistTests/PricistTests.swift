@@ -21,8 +21,8 @@ final class PricistTests: XCTestCase {
         let config = PricistConfiguration(sdkKey: "pk_test_key")
 
         XCTAssertNil(config.host)
-        XCTAssertEqual(pricistDefaultBaseURL, "https://api.pricist.com")
-        XCTAssertEqual(pricistResolveBaseURL(config), "https://api.pricist.com")
+        XCTAssertEqual(pricistDefaultBaseURL, "https://api.pricist.dev")
+        XCTAssertEqual(pricistResolveBaseURL(config), "https://api.pricist.dev")
     }
 
     func testHostOverride() {
