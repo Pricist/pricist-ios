@@ -52,12 +52,11 @@ public struct PricistDecision {
         payload[key] as? Bool ?? fallback
     }
 
-    /// Convenience for price experiments (`payload["price"]`).
-    public var price: Double? {
-        if let n = payload["price"] as? Double { return n }
-        if let n = payload["price"] as? Int { return Double(n) }
-        return nil
-    }
+    /// Convenience for monetization experiments — the RevenueCat **offering
+    /// identifier** to fetch and present (`payload["offering"]`). Pass this to
+    /// RevenueCat; it owns the actual price + purchase. Pricist never returns a
+    /// raw price.
+    public var offering: String? { payload["offering"] as? String }
 
     /// Convenience for copy experiments (`payload["copy"]`).
     public var copy: String? { payload["copy"] as? String }
